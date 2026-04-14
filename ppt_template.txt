@@ -1,0 +1,41 @@
+# PPT Template: Global Energy Transition Dashboard Project
+
+## Slide 1: Title & Project Overview
+- **Title:** Global Energy Transition: Predicting the Future of Renewables
+- **Subtitle:** An End-to-End Data Analytics and Machine Learning Dashboard
+- **Key Highlights:**
+    - Objective: Predicting `renewables_share_energy` using global macroeconomic and energy data.
+    - Technology Stack: Python, Pandas, Scikit-Learn, Streamlit, Plotly.
+    - Dataset: OWID Energy Data (23k+ records).
+
+## Slide 2: The Data Journey (Preprocessing & Cleaning)
+- **Challenge:** Handling a "dirty" dataset with huge size and massive missing values.
+- **The Transformation:**
+    - **Row Reduction:** 23,232 rows → 4,325 rows (Focusing on country-level data and non-null targets).
+    - **Leakage Prevention:** Identified and removed 80+ "cheat" columns (e.g., specific solar/wind shares).
+    - **Cleaning Techniques:**
+        - Median Imputation for missing values (preserving distribution).
+        - Isolation Forest for robust Outlier Handling.
+        - Statistical filtering (dropping features with corr > 0.8 to avoid multicollinearity).
+
+## Slide 3: Actionable Insights (EDA)
+- **Global Snapshot:** Visualizing current renewable energy shares using an interactive Choropleth Map (ISO-code based).
+- **Macro Dynamics:**
+    - Animated Scatter Plots: Visualizing the relationship between GDP growth and Electricity Generation over time (2000-2022).
+    - Country Trends: In-depth analysis of transition trajectories for specific nations.
+- **Future Projections:** Using CAGR (Compound Annual Growth Rate) logic to forecast energy ratios to 2030.
+
+## Slide 4: Feature Selection & Model Performance
+- **Optimizing Compute:** Showcasing how dimensionality reduction cut training time while maintaining high accuracy.
+- **Strategies Compared:**
+    - Filter-Based (SelectKBest)
+    - Wrapper-Based (Sequential Feature Selector)
+    - Embedded (Lasso L1 Regularization)
+    - Feature Extraction (PCA)
+- **Best Model:** Random Forest and Bagging Regressors achieved R² scores > 0.95 with optimized feature sets.
+
+## Slide 5: The Prediction Lab & Future Outlook
+- **Interactive Simulator:** A "Sandbox" where users can tweak variables manually to see real-time impact on renewable predictions.
+- **The "Green Meter":**
+    - Categorizing predictions into stages: Fossil Dependent (<10%), Transitioning (10-40%), and Green Leader (>40%).
+- **Conclusion:** Data-driven insights suggest a significant global shift toward renewables, provided macroeconomic factors stay favorable.
