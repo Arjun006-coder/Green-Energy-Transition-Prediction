@@ -156,8 +156,44 @@ with t2:
         st.plotly_chart(fig_map, use_container_width=True)
 
     st.divider()
+
+    sel_country = st.selectbox(
+        "Select Country for Deeper Insights",
+        sorted(df_full['country'].unique().tolist()),
+        index=df_full['country'].unique().tolist().index('Norway') if 'Norway' in df_full['country'].unique() else 0
+    )
+
+    # Quick KPIs for the selected year (keeps the tab more decision-oriented)
+    year_series = map_data['renewables_share_energy'].dropna()
+    if not year_series.empty:
+        global_median = float(year_series.median())
+        global_p75 = float(year_series.quantile(0.75))
+        global_max = float(year_series.max())
+    else:
+        global_median, global_p75, global_max = 0.0, 0.0, 0.0
+
+    sel_country_year = map_data[map_data['country'] == sel_country]
+    if not sel_country_year.empty and pd.notna(sel_country_year.iloc[0].get('renewables_share_energy')):
+        sel_year_val = float(sel_country_year.iloc[0]['renewables_share_energy'])
+        # Rank (1 = best) within that year
+        ranked = map_data[['country', 'renewables_share_energy']].dropna(subset=['renewables_share_energy']).sort_values('renewables_share_energy', ascending=False)
+        total_ranked = int(len(ranked))
+        sel_rank = int(ranked.reset_index(drop=True).index[ranked['country'] == sel_country][0]) + 1 if (total_ranked > 0 and (ranked['country'] == sel_country).any()) else None
+    else:
+        sel_year_val, sel_rank, total_ranked = None, None, int(len(map_data[['country', 'renewables_share_energy']].dropna(subset=['renewables_share_energy'])))
+
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    kpi1.metric("🌐 Global Median (Year)", f"{global_median:.1f}%")
+    kpi2.metric("📈 Global 75th %ile (Year)", f"{global_p75:.1f}%")
+    kpi3.metric("🏆 Global Best (Year)", f"{global_max:.1f}%")
+    kpi4.metric(
+        f"🎯 {sel_country} (Year)",
+        f"{sel_year_val:.1f}%" if sel_year_val is not None else "N/A",
+        f"Rank {sel_rank}/{total_ranked}" if sel_rank is not None else "Not reported"
+    )
     
-    st.markdown("<span class='blue-text'>📊 Top 10 Green Leaders & Macro Scatter Dynamics</span>", unsafe_allow_html=True)
+    st.markdown("<span class='blue-text'>📊 Leaders, Laggards, and Context</span>", unsafe_allow_html=True)
+    st.caption("Useful views for decision-making: compare extremes, then place a country in the global distribution.")
     
     eda_c1, eda_c2 = st.columns(2)
     with eda_c1:
@@ -167,20 +203,138 @@ with t2:
         st.plotly_chart(fig_top, use_container_width=True)
         
     with eda_c2:
-        # Animated Scatter
-        anim_df = df_full[df_full['year'] >= 2000].copy()
-        anim_df['electricity_demand_per_capita'] = anim_df['electricity_demand_per_capita'].fillna(0)
-        fig_anim = px.scatter(anim_df, x="gdp", y="electricity_generation", animation_frame="year", animation_group="country",
-               size="population", color="renewables_share_energy", hover_name="country",
-               log_x=True, log_y=True, size_max=60, title="Economic Growth vs Electricity Output (2000+)",
-               color_continuous_scale=px.colors.sequential.Plotly3)
-        fig_anim.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.5)", font_color="#0f172a")
-        st.plotly_chart(fig_anim, use_container_width=True)
+        bottom10 = (
+            map_data[['country', 'renewables_share_energy']]
+            .dropna(subset=['renewables_share_energy'])
+            .nsmallest(10, 'renewables_share_energy')
+        )
+        fig_bottom = px.bar(
+            bottom10,
+            x='renewables_share_energy',
+            y='country',
+            orientation='h',
+            color='renewables_share_energy',
+            color_continuous_scale=px.colors.sequential.Reds,
+            title=f"Bottom 10 Transition Laggards ({sel_year})"
+        )
+        fig_bottom.update_layout(title=f"Bottom 10 Transition Laggards ({sel_year})", yaxis={'categoryorder':'total ascending'}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.5)")
+        st.plotly_chart(fig_bottom, use_container_width=True)
+
+    context_c1, context_c2 = st.columns(2)
+    with context_c1:
+        dist_df = map_data[['country', 'renewables_share_energy']].dropna(subset=['renewables_share_energy'])
+        if dist_df.empty:
+            st.warning("No distribution data available for this year.")
+        else:
+            vals = pd.to_numeric(dist_df['renewables_share_energy'], errors='coerce').dropna().to_numpy(dtype=float)
+            if len(vals) < 3:
+                st.warning("Not enough data points to summarize the distribution for this year.")
+            else:
+                x_sorted = np.sort(vals)
+                y_pct = (np.arange(1, len(x_sorted) + 1) / len(x_sorted)) * 100.0
+
+                fig_dist = go.Figure()
+                fig_dist.add_trace(
+                    go.Scatter(
+                        x=x_sorted,
+                        y=y_pct,
+                        mode='lines',
+                        line=dict(color='#2563eb', width=4),
+                        hovertemplate='Renewables share: %{x:.1f}%<br>Countries below: %{y:.0f}%<extra></extra>'
+                    )
+                )
+
+                if sel_year_val is not None:
+                    sel_pct = float((x_sorted <= sel_year_val).mean() * 100.0)
+                    fig_dist.add_vline(
+                        x=sel_year_val,
+                        line_width=3,
+                        line_dash='dash',
+                        line_color='#10b981'
+                    )
+                    fig_dist.add_trace(
+                        go.Scatter(
+                            x=[sel_year_val],
+                            y=[sel_pct],
+                            mode='markers+text',
+                            marker=dict(size=12, color='#10b981', line=dict(width=2, color='white')),
+                            text=[f"{sel_country}: {sel_year_val:.1f}% (~{sel_pct:.0f}th %ile)"],
+                            textposition='top left',
+                            hovertemplate=f"{sel_country}<br>Renewables share: {sel_year_val:.1f}%<br>Percentile: {sel_pct:.0f}%<extra></extra>"
+                        )
+                    )
+
+                fig_dist.update_layout(
+                    title=f"Distribution as Percentiles (CDF) ({sel_year})",
+                    xaxis_title='Renewables Share (%)',
+                    yaxis_title='% of Countries at or Below',
+                    yaxis=dict(range=[0, 100], ticksuffix='%'),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(255,255,255,0.5)",
+                    font_color="#0f172a",
+                    margin=dict(t=60, b=40, l=20, r=20),
+                    showlegend=False
+                )
+                st.plotly_chart(fig_dist, use_container_width=True)
+
+    with context_c2:
+        rel_df = (
+            map_data[['country', 'renewables_share_energy', 'carbon_intensity_elec']]
+            .dropna(subset=['renewables_share_energy', 'carbon_intensity_elec'])
+            .copy()
+        )
+        rel_df['carbon_intensity_elec'] = pd.to_numeric(rel_df['carbon_intensity_elec'], errors='coerce')
+        rel_df = rel_df.dropna(subset=['carbon_intensity_elec'])
+
+        if len(rel_df) < 3:
+            st.warning("Not enough data points in this year to relate carbon intensity to renewables share.")
+        else:
+            fig_rel = px.scatter(
+                rel_df,
+                x='renewables_share_energy',
+                y='carbon_intensity_elec',
+                hover_name='country',
+                title=f"Does More Renewables Mean Cleaner Electricity? ({sel_year})",
+                labels={
+                    'renewables_share_energy': 'Renewables Share (%)',
+                    'carbon_intensity_elec': 'Carbon Intensity of Electricity'
+                },
+                color_discrete_sequence=["#6366f1"]
+            )
+
+            # Trend line (simple, readable)
+            x_vals = rel_df['renewables_share_energy'].to_numpy(dtype=float)
+            y_vals = rel_df['carbon_intensity_elec'].to_numpy(dtype=float)
+            slope, intercept = np.polyfit(x_vals, y_vals, 1)
+            x_line = np.linspace(x_vals.min(), x_vals.max(), 100)
+            y_line = slope * x_line + intercept
+            fig_rel.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', name='Trend', line=dict(color='#10b981', width=3)))
+
+            focus = rel_df[rel_df['country'] == sel_country]
+            if not focus.empty:
+                fig_rel.add_trace(
+                    go.Scatter(
+                        x=[float(focus.iloc[0]['renewables_share_energy'])],
+                        y=[float(focus.iloc[0]['carbon_intensity_elec'])],
+                        mode='markers+text',
+                        name=sel_country,
+                        marker=dict(size=14, color='#2563eb', line=dict(width=2, color='white')),
+                        text=[sel_country],
+                        textposition='top center'
+                    )
+                )
+
+            fig_rel.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(255,255,255,0.5)",
+                font_color="#0f172a",
+                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+            )
+            st.plotly_chart(fig_rel, use_container_width=True)
 
     st.divider()
 
     st.markdown("<span class='emerald-text'>🚀 Future Projections (CAGR Modeling)</span>", unsafe_allow_html=True)
-    sel_country = st.selectbox("Select Country for Trend Analysis", sorted(df_full['country'].unique().tolist()), index=df_full['country'].unique().tolist().index('Norway') if 'Norway' in df_full['country'].unique() else 0)
     country_data = df_full[df_full['country'] == sel_country].sort_values("year")
     
     # Projection Math (CAGR)
